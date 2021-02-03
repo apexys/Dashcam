@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, net::{TcpStream, UdpSocket}, thread::{self, JoinHandle}, time::Duration};
+use std::{collections::VecDeque, net::{TcpStream, UdpSocket}, thread::{self, JoinHandle}, time::{Duration, SystemTime, UNIX_EPOCH}};
 use std::sync::mpsc::{channel, Sender,Receiver};
 use jpeg_decoder::Decoder;
 use ringbuf::{RingBuffer, Producer, Consumer};
@@ -44,7 +44,7 @@ impl WifiCam{
             loop{
                 let (length, src) = socket.recv_from(&mut buf).expect("Error receiving UDP data");
                 producer.write_all(&buf[0..length]).expect("Error writing to ringbuffer");
-                eprintln!("Received {} bytes from {}", length, src);
+                //eprintln!("Received {} bytes from {}", length, src);
             }
         });
         
@@ -84,7 +84,7 @@ impl WifiCam{
     fn start_jpeg_thread(mut bytestream: Consumer<u8>) -> JoinHandle<()>{
         let jpeg_thread = thread::spawn(move || {
             //Storage for our frames
-            let mut frame_bytes = vec![0; 1024 * 32 * 4]; //Lets make this larger than usually needed, so multiple frames can find place here
+            let mut frame_bytes = vec![0; 1024 * 32 * 8]; //Lets make this larger than usually needed, so multiple frames can find place here
             let find_magic_bytes = |start_offset, buffer: &[u8]| {
                 const JPEG_MAGIC_NUMBER:[u8; 3] = [0xFF, 0xD8, 0xFF];
                 for i in start_offset..(buffer.len() - 3){
@@ -97,14 +97,18 @@ impl WifiCam{
             loop{
                 let bytes_read = bytestream.read(&mut frame_bytes).unwrap_or(0);
                 if bytes_read == 0{
-                    thread::sleep(Duration::from_millis(10));
+                    thread::sleep(Duration::from_millis(1));
                     continue;
                 }
-                if let Some(first_magic_number) = find_magic_bytes(0, &frame_bytes[0..bytes_read]){
+                if let Some(mut first_magic_number) = find_magic_bytes(0, &frame_bytes[0..bytes_read]){
                     eprintln!("first_magic_number found");
                     let mut buffer_end = bytes_read;
                     while buffer_end < frame_bytes.len() - (1024 * 32){ //Always leave space for a second frame
                         let bytes_read = bytestream.read(&mut frame_bytes[buffer_end..]).unwrap_or(0);
+                        if bytes_read == 0{
+                            thread::sleep(Duration::from_millis(1));
+                            continue;
+                        }
                         if let Some(second_magic_number) = find_magic_bytes(buffer_end, &frame_bytes[0..(buffer_end + bytes_read)]){
                             //Found a jpeg frame!
                             WifiCam::decode_jpeg_frame(&frame_bytes[first_magic_number .. second_magic_number]);
@@ -114,6 +118,7 @@ impl WifiCam{
                                 frame_bytes[i] = frame_bytes[i + second_magic_number];
                             }
                             buffer_end = number_of_overhanging_bytes;
+                            first_magic_number = 0;
                         }else{
                             //If we didn't find a second magic number we didn't load enough of the previous frame yet
                             //So we just move the end of the buffer forward by the required amount and load more bytes
@@ -136,10 +141,18 @@ impl WifiCam{
     }
 
     fn decode_jpeg_frame(bytes: &[u8]){
-        let mut decoder = Decoder::new(bytes);
-        let pixels = decoder.decode().expect("Error deciding image!");
-        let metadata = decoder.info().expect("Error reading metadata");
-        eprintln!("Read frame: {:?}", metadata);
+        /*let mut decoder = Decoder::new(bytes);
+        match decoder.decode(){
+            Ok(pixels) => {
+                let metadata = decoder.info().expect("Error reading metadata");
+                eprintln!("Read frame: {:?}", metadata);
+            },
+            Err(e) => {
+                eprintln!("Decoding error: {:?}", e);
+            }
+        }*/
+        thread::sleep(Duration::from_millis(1));
+        eprintln!("Frame {}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
     }
 }
 
