@@ -4,9 +4,16 @@ version = "0.1.0"
 authors = ["Valentin Buck <ivan.v.buck@student.fh-kiel.de>"]
 edition = "2018"
 
+[profile.release]
+debug = true
+#lto = "fat"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 jpeg-decoder = "^0.1"
 ringbuf = "0.2.3"
 smallvec = "1.6.1"
+arc-swap = "^1.2"
+gl = "0.14.0"
+glutin = "0.24"
