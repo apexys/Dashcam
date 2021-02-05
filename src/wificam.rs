@@ -11,8 +11,8 @@ pub struct WifiCam{
     udp_thread: JoinHandle<()>,
     tcp_thread: JoinHandle<()>,
     jpeg_thread: JoinHandle<()>,
-    tcp_messages: Receiver<TcpMessage>,
-    last_frame: Arc<ArcSwap<Vec<u8>>>
+    pub tcp_messages: Receiver<TcpMessage>,
+    pub last_frame: Arc<ArcSwap<Vec<u8>>>
 }
 
 impl WifiCam{
@@ -179,7 +179,19 @@ impl WifiCam{
         let mut decoder = Decoder::new(bytes);
         match decoder.decode(){
             Ok(pixels) => {
-                //let metadata = decoder.info().expect("Error reading metadata");
+                let metadata = decoder.info().expect("Error reading metadata");
+                if metadata.width != 1280{
+                    eprintln!("Width wrong");
+                    return None;
+                }
+                if metadata.height != 720{
+                    eprintln!("Height wrong");
+                    return None;
+                }
+                if pixels.len() != 1280 * 720 * 3{
+                    eprintln!("Pixel length wrong");
+                    return None;
+                }
                 //eprintln!("Read frame: {:?}", metadata);
                 Some(pixels)
             },

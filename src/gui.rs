@@ -1,9 +1,11 @@
+use arc_swap::ArcSwap;
 use gl::types::*;
-use std::ffi::CString;
+use glutin::{Api, GlRequest};
+use std::{ffi::CString, sync::Arc};
 use std::mem;
 use std::ptr;
 use std::str;
-use crate::{Program, Shader};
+use crate::{Program, Shader, texture::Texture};
 
 const IMAGE_WIDTH: usize = 1280;
 const IMAGE_HEIGHT: usize = 720;
@@ -11,31 +13,29 @@ const IMAGE_BYTES_PER_PIXEL: usize = 3;
 
 
 
-const VERTEX_DATA: [Glfloat; 8] = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0];
+const VERTEX_DATA: [GLfloat; 8] = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0];
 
 const VERTEX_SHADER_SOURCE: &'static str = "
-#version 430
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 vertexUV;
-uniform vec2 ul_corner;
-uniform vec2 size;
+attribute vec2 position;
+attribute vec2 vertexUV;
+//uniform vec2 ul_corner;
+//uniform vec2 size;
 
-out vec2 UV;
+varying vec2 UV;
 
 void main(){
     gl_Position = vec4(position, 0.0, 1.0);
-    UV = position;
+    UV = (position + 1.0) / 2.0;
 }
 ";
 
 const FRAGMENT_SHADER_SOURCE: &'static str = "
-in vec2 UV;
+precision highp float;
+varying vec2 UV;
 uniform sampler2D texture1;
 
-out vec4 color;
-
 void main(){
-    color = texture(texture1, UV);
+    gl_FragColor = texture2D(texture1, UV);
 }
 ";
 
@@ -44,10 +44,11 @@ pub struct Gui{
 }
 
 impl Gui{
-    pub fn start(){
+    pub fn start(camera_image: Arc<ArcSwap<Vec<u8>>>){
         let event_loop = glutin::event_loop::EventLoop::new();
         let window = glutin::window::WindowBuilder::new();
         let gl_window = glutin::ContextBuilder::new()
+            .with_gl(GlRequest::Specific(Api::OpenGlEs, (2,0)))
             .build_windowed(window, &event_loop)
             .unwrap();
     
@@ -83,27 +84,13 @@ impl Gui{
 
 
         //Create texture
-        let mut textureId = 0;
-        let data = vec![0u8; IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_BYTES_PER_PIXEL];
-        let format = gl::RGB;
-        unsafe{
-            gl::GenTextures(1, &mut textureId);
-            gl::BindTexture(gl::TEXTURE_2D, textureId);
-            gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, img.width() as i32, img.height() as i32,
-                0, format, gl::UNSIGNED_BYTE, &data[0] as *const u8 as *const c_void);
-            gl::GenerateMipmap(gl::TEXTURE_2D);
-
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR_MIPMAP_LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-        }
+        let tex = Texture::new(1280, 720, false);
 
         //Use shader program
         unsafe{
             // Use shader program
             gl::UseProgram(program.handle);
-            gl::BindFragDataLocation(program.handle, 0, CString::new("color").unwrap().as_ptr());
+            //gl::BindFragDataLocation(program.handle, 0, CString::new("color").unwrap().as_ptr());
         }
 
         //Enable vertex position attribute array
@@ -120,8 +107,44 @@ impl Gui{
             );
         }
 
+        event_loop.run(move |event, _, control_flow| {
+            use glutin::event::{Event, WindowEvent};
+            use glutin::event_loop::ControlFlow;
+            *control_flow = ControlFlow::Poll;
+            match event {
+                Event::LoopDestroyed => return,
+                Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::CloseRequested => {
+                        // Cleanup
+                        unsafe {
+                            gl::DeleteBuffers(1, &vbo);
+                            gl::DeleteVertexArrays(1, &vao);
+                        }
+                        *control_flow = ControlFlow::Exit
+                    },
+                    WindowEvent::Resized(size) => {
+                        unsafe{
+                            gl::Viewport(0,0, size.width as i32, size.height as i32);
+                        }
+                    }
+                    _ => (),
+                },
+                Event::RedrawRequested(_) => {
+                    tex.update(&camera_image.load());
+                    unsafe {
+                        // Clear the screen to black
+                        gl::ClearColor(0.3, 0.3, 0.3, 1.0);
+                        gl::Clear(gl::COLOR_BUFFER_BIT);
+                        // Draw a triangle from the 3 vertices
+                        gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+                    }
+                    gl_window.swap_buffers().unwrap();
+                },
+                _ => {
+                    gl_window.window().request_redraw();
+                },
+            }
+        });
     }
 
-
-    pub fn 
 }

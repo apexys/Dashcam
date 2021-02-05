@@ -13,5 +13,7 @@ fn to_hex_str(bytes: &[u8]) -> String{
 
 fn main() {
     let cam = WifiCam::new();
-    cam.run();
+    //let last_frame = cam.last_frame.clone();
+    //cam.run();
+    Gui::start(cam.last_frame.clone());
 }
