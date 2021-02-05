@@ -1,6 +1,6 @@
 use arc_swap::ArcSwap;
 use gl::types::*;
-use glutin::{Api, GlRequest};
+use glutin::{Api, GlRequest, dpi};
 use std::{ffi::CString, sync::Arc};
 use std::mem;
 use std::ptr;
@@ -46,7 +46,7 @@ pub struct Gui{
 impl Gui{
     pub fn start(camera_image: Arc<ArcSwap<Vec<u8>>>){
         let event_loop = glutin::event_loop::EventLoop::new();
-        let window = glutin::window::WindowBuilder::new();
+        let window = glutin::window::WindowBuilder::new().with_inner_size(dpi::LogicalSize::new(1280, 720));
         let gl_window = glutin::ContextBuilder::new()
             .with_gl(GlRequest::Specific(Api::OpenGlEs, (2,0)))
             .build_windowed(window, &event_loop)
